@@ -23,9 +23,21 @@ def extract_politico_article(page, url):
 
         # DATE
         time_tag = soup.select_one("time[datetime], p.story-meta__timestamp time")
-        timestamp_text = time_tag.get("datetime") if time_tag else "N/A"
+        timestamp_text = time_tag.get("datetime") if time_tag else None
 
-        # Format readable date
+        if not timestamp_text:
+            date_tag = soup.select_one("span.date-time__date")
+            time_tag = soup.select_one("span.date-time__time")
+
+            date_part = date_tag.get_text(strip=True) if date_tag else ""
+            time_part = time_tag.get_text(strip=True) if time_tag else ""
+
+            if date_part or time_part:
+                timestamp_text = f"{date_part} {time_part}".strip()
+            else:
+                timestamp_text = "N/A"
+
+        # Format final readable date
         if timestamp_text != "N/A":
             try:
                 timestamp_dt = datetime.strptime(timestamp_text, "%Y-%m-%d %H:%M:%S")
@@ -36,7 +48,8 @@ def extract_politico_article(page, url):
             date_text = "N/A"
 
         # ARTICLE BODY
-        article_text = "N/A"
+        article_texts = []
+
         for selector in [
             "div.story-text",
             "div.article__content",
@@ -44,14 +57,16 @@ def extract_politico_article(page, url):
             "article[data-story-id]",
             "section.article-content"
         ]:
-            article_div = soup.select_one(selector)
-            if article_div:
-                paragraphs = article_div.find_all("p")
-                if paragraphs:
-                    article_text = "\n".join(
-                        [p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)]
-                    )
-                    break
+            article_sections = soup.select(selector)
+            for section in article_sections:
+                paragraphs = section.select("p")
+                text = "\n".join(
+                    [p.get_text(separator=" ", strip=True) for p in paragraphs if p.get_text(strip=True)]
+                )
+                if text:
+                    article_texts.append(text)
+
+        article_text = "\n\n".join(article_texts) if article_texts else "N/A"
 
         # IMAGE
         image_tag = soup.select_one("figure img, img.article__image")
@@ -105,7 +120,7 @@ def main():
 
         browser.close()
 
-    with open("politico_articles_output.json", "w", encoding="utf-8") as f:
+    with open("politico_articles_output_v1.json", "w", encoding="utf-8") as f:
         json.dump(all_articles, f, ensure_ascii=False, indent=2)
 
     end_time = datetime.now()
